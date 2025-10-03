@@ -1,3 +1,4 @@
+# %%
 import argparse
 import os
 import shutil
@@ -15,19 +16,20 @@ from cgcnn.data import CIFData
 from cgcnn.data import collate_pool
 from cgcnn.model import CrystalGraphConvNet
 
-parser = argparse.ArgumentParser(description='Crystal gated neural networks')
-parser.add_argument('modelpath', help='path to the trained model.')
-parser.add_argument('cifpath', help='path to the directory of CIF files.')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
-                    metavar='N', help='mini-batch size (default: 256)')
-parser.add_argument('-j', '--workers', default=0, type=int, metavar='N',
-                    help='number of data loading workers (default: 0)')
-parser.add_argument('--disable-cuda', action='store_true',
-                    help='Disable CUDA')
-parser.add_argument('--print-freq', '-p', default=10, type=int,
-                    metavar='N', help='print frequency (default: 10)')
+class idk:
+    def __init__(self):
+        self.modelpath = 'C:/Users/bjama/Desktop/MPhys/CGCNN/pre-trained/formation-energy-per-atom.pth.tar'
+        self.cifpath = 'C:/Users/bjama/Desktop/MPhys/CGCNN/data/sample-regression'
+        self.batch_size = 256
+        self.workers = 0
+        self.disable_cuda = True
+        self.print_freq = 10
 
-args = parser.parse_args(sys.argv[1:])
+args = idk()
+
+np.random.seed(12939)
+
+print("Test")
 if os.path.isfile(args.modelpath):
     print("=> loading model params '{}'".format(args.modelpath))
     model_checkpoint = torch.load(args.modelpath,
@@ -59,6 +61,19 @@ def main():
     structures, _, _ = dataset[0]
     orig_atom_fea_len = structures[0].shape[-1]
     nbr_fea_len = structures[1].shape[-1]
+    # build encoder
+    encoder = nn.Linear(orig_atom_fea_len,nbr_fea_len)
+    weights = model_checkpoint['state_dict']['embedding.weight']
+    biases = model_checkpoint['state_dict']['embedding.bias']
+    encoder.weight.data = weights
+    encoder.bias.data = biases
+    
+    print(encoder(structures[0]))
+
+    return
+
+
+    # etc
     model = CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len,
                                 atom_fea_len=model_args.atom_fea_len,
                                 n_conv=model_args.n_conv,
