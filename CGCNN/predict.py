@@ -62,7 +62,7 @@ def main():
     orig_atom_fea_len = structures[0].shape[-1]
     nbr_fea_len = structures[1].shape[-1]
     # build encoder
-    encoder = nn.Linear(orig_atom_fea_len,nbr_fea_len)
+    encoder = nn.Linear(orig_atom_fea_len,model_args.atom_fea_len)
     weights = model_checkpoint['state_dict']['embedding.weight']
     biases = model_checkpoint['state_dict']['embedding.bias']
     encoder.weight.data = weights
@@ -106,7 +106,7 @@ def main():
         print("=> loading model '{}'".format(args.modelpath))
         checkpoint = torch.load(args.modelpath,
                                 map_location=lambda storage, loc: storage)
-        model.load_state_dict(checkpoint['state_dict'])
+        model.load_state_dict(checkpoint['state_dict']) # THIS IS WHERE WE TRANSFER WEIGHTS!!
         normalizer.load_state_dict(checkpoint['normalizer'])
         print("=> loaded model '{}' (epoch {}, validation {})"
               .format(args.modelpath, checkpoint['epoch'],
