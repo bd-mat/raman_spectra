@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 
 
+
 test = pd.read_json('2dmatpedia/db.json',lines=True)
 structs = test.structure
 bandgaps = test.bandgap

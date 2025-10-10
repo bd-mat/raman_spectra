@@ -14,6 +14,13 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.dataloader import default_collate
 from torch.utils.data.sampler import SubsetRandomSampler
 
+JSONTYPE = True
+
+if JSONTYPE:
+    FILE_ENDING = '.json'
+else:
+    FILE_ENDING = '.cif'
+
 
 def get_train_val_test_loader(dataset, collate_fn=default_collate,
                               batch_size=64, train_ratio=None,
@@ -299,6 +306,7 @@ class CIFData(Dataset):
     """
     def __init__(self, root_dir, max_num_nbr=12, radius=8, dmin=0, step=0.2,
                  random_seed=123):
+        
         self.root_dir = root_dir
         self.max_num_nbr, self.radius = max_num_nbr, radius
         assert os.path.exists(root_dir), 'root_dir does not exist!'
@@ -321,7 +329,7 @@ class CIFData(Dataset):
     def __getitem__(self, idx):
         cif_id, target = self.id_prop_data[idx]
         crystal = Structure.from_file(os.path.join(self.root_dir,
-                                                   cif_id+'.cif'))
+                                                   cif_id+FILE_ENDING))
         atom_fea = np.vstack([self.ari.get_atom_fea(crystal[i].specie.number)
                               for i in range(len(crystal))])
         atom_fea = torch.Tensor(atom_fea)

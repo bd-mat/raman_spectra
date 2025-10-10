@@ -18,8 +18,8 @@ from cgcnn.model import CrystalGraphConvNet
 
 class idk:
     def __init__(self):
-        self.modelpath = 'C:/Users/bjama/Desktop/MPhys/CGCNN/pre-trained/formation-energy-per-atom.pth.tar'
-        self.cifpath = 'C:/Users/bjama/Desktop/MPhys/CGCNN/data/sample-regression'
+        self.modelpath = 'C:/Users/bjama/Desktop/MPhys/CGCNN/pre-trained/band-gap.pth.tar'
+        self.cifpath = "C:/Users/bjama/Desktop/MPhys/CGCNN/data/small/"
         self.batch_size = 256
         self.workers = 0
         self.disable_cuda = True
