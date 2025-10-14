@@ -191,6 +191,7 @@ class JSONData(Dataset):
         ├── id0.json
         ├── id1.json
     ├── atom_init.json
+    ├── id_prop.csv
 
     id_prop.csv: a CSV file with two columns. The first column recodes a
     unique ID for each crystal, and the second column recodes the value of
@@ -233,8 +234,7 @@ class JSONData(Dataset):
         self.max_num_nbr, self.radius = max_num_nbr, radius
         assert os.path.exists(root_dir), 'root_dir does not exist!'
     
-        id_prop_file = "C:/Users/reise/Documents/Uni/Y4/MPhys_Project/trial_cgcnn/id_prop.csv"
-        #id_prop_file = os.path.join(self.root_dir, 'id_prop.csv')
+        id_prop_file = os.path.join(self.root_dir, 'id_prop.csv')
         assert os.path.exists(id_prop_file), 'id_prop.csv does not exist!'
         with open(id_prop_file) as f:
             reader = csv.reader(f)
@@ -282,4 +282,5 @@ class JSONData(Dataset):
         nbr_fea = torch.Tensor(nbr_fea)
         nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
         target = torch.Tensor([float(target)])
+
         return (atom_fea, nbr_fea, nbr_fea_idx), target, crystal_id
