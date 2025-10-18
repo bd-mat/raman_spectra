@@ -11,21 +11,34 @@ import os
 
 class GetRaman:
     """
-    Get raman spectra from the folders.
+    Get raman spectra from the folders of the Li et. al. 2025 dataset files.
     
     Assumed folder structure:
         root_dir
         ├── 1_ChemFormula
-            ├── aman.dat
+            ├── raman.dat
         ├── 2_ChemFormula
-            ├── aman.dat
+            ├── raman.dat
         ├── 3_ChemFormula
-            ├── aman.dat
+            ├── raman.dat
 
     
     """
     
     def __init__(self, folder_path, n_peaks=10):
+        """
+        Parameters
+        ----------
+        folder_path : str
+            Path to root directory.
+        n_peaks : int, optional
+            Number of raman peaks that will be returned. The default is 10.
+
+        Returns
+        -------
+        None.
+
+        """
         self.root = folder_path
         self.n_peaks = n_peaks
         
@@ -33,6 +46,9 @@ class GetRaman:
         assert os.path.exists(self.root), f'ERROR: {self.root} does not exist'
         #   create dictionary {crystal_id, folder name}
         self.dir_index = {f"{ele.split('_')[0]}": ele for ele in os.listdir(self.root)}
+        self.id_num_list = [ele.split('_')[0] for ele in os.listdir(self.root)]
+        
+            
         
     def get_single_spec(self, crystal_id):
         """
@@ -54,6 +70,10 @@ class GetRaman:
         raman_spectrum = np.empty((0,2)) #initialise output array
         name = self.dir_index[str(crystal_id)]  #get folder name for id
         fpath = self.root + f'/{name}' + '/raman.dat'
+        
+        #some files are called harmonic.dat rather than raman.dat
+        if os.path.exists(fpath) == False:
+            fpath = self.root + f'/{name}' + '/harmonic.dat'
         with open(fpath, 'r') as file:
             for line in file: #iterate over raman peaks and place into array
                 line = line.replace("\n", "")
