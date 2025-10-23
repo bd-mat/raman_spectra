@@ -1,4 +1,5 @@
 # %%
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import numpy as np
@@ -6,10 +7,8 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
-
 from torch.utils.data import Dataset
 import os
-import numpy as np
 
 class SpecDsLoader(Dataset):
     def __init__(self, root_dir):
@@ -30,7 +29,7 @@ class encoder(nn.Module):
     Encodes an input raman spectrum via a bottleneck, and then
     decodes the result.
     """
-    def __init__(self,spec_length=3000,encode_length=100):
+    def __init__(self,spec_length=3000,encode_length=300,n_hidden=1,h_length=1000):
         """
         Initialise the encoder.
 
@@ -44,45 +43,94 @@ class encoder(nn.Module):
         """
         super(encoder,self).__init__()
         # Parameters
+        #self.activate = nn.Softplus()
+        self.activate = nn.ReLU()
         self.spec_length = spec_length
         self.encode_length = encode_length
+        self.n_hidden = n_hidden
+        self.h_length = h_length
         # Layers
-        self.encode = nn.Linear(self.spec_length,self.encode_length) # encoding layer
-        self.decode = nn.Linear(self.encode_length,self.spec_length) # decoding layer
-        # for now, no hidden layers.
+        if self.n_hidden == 0:
+            self.encode = nn.Linear(self.spec_length,self.encode_length) # encoding layer
+            self.decode = nn.Linear(self.encode_length,self.spec_length) # decoding layer
+        else:
+            self.encode = nn.Linear(self.h_length,self.encode_length)
+            self.decode = nn.Linear(self.encode_length,self.h_length)
+        # hidden layers
+        if self.n_hidden >= 1:
+            # initial conversion
+            self.h_init = nn.Linear(spec_length,h_length)
+            self.h_fin = nn.Linear(h_length,spec_length)
+            # connected layers
+            if self.n_hidden>1:
+                self.hs1 = nn.ModuleList([nn.Linear(h_length,h_length) for _ in range(n_hidden-1)])
+                self.hs2 = nn.ModuleList([nn.Linear(h_length,h_length) for _ in range(n_hidden-1)])
     
     def forward(self,in_spectrum):
-        # encoded
-        enc = self.encode(in_spectrum)
+        ins = in_spectrum
+        # optional hidden layers
+        if self.n_hidden >= 1:
+            hid = self.activate(self.h_init(ins))
+            if self.n_hidden > 1:
+                for h in self.hs1:
+                    hid = self.activate(h(hid))
+        else:
+            hid = ins
+        # encode
+        enc = self.encode(hid)
+        enc = self.activate(enc)
         # and now, decode
-        out = self.decode(enc)
+        hout = self.decode(enc)
+        hout = self.activate(hout)
+        # optional hidden layers
+        if self.n_hidden >= 1:
+            if self.n_hidden > 1:
+                for h in self.hs1:
+                    hout = self.activate(h(hout))
+            out = self.activate(self.h_fin(hout))
+        else:
+            out = hout
         return out
-    
+
+# custom loss function
+def weightedloss(w):
+    def loss(output,target):
+        dif = torch.square(target-output)
+        #sum = torch.abs(target+output)
+        comb = torch.mul(dif,dif)
+    return loss
 # %%
 
-PT = 0.6
-batch_size = 128
+p_train = 0.6
+p_val = 0.2
+batch_size = 256
 num_workers = 0
 do_cuda = False
+shuffle = True # shuffle indices
+np.random.seed(1234)
 
-root_dir = "C:/Users/bjama/Desktop/MPhys/spectrum_embedding/spectra"
+EPOCHS = 10
+
+root_dir = "C:/Users/bjama/Desktop/MPhys/spectrum_embedding/fake_spectra"
 
 # %%
 
 # loss function
-loss_fn = nn.L1Loss()
+loss_fn = nn.MSELoss()
 # define our model
-model = encoder()
+model = encoder(n_hidden=5,h_length=1000)
 # optimise via sgd
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-# format should be (in,out)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9) # maybe use 
 # create dataloader
 train_dataset = SpecDsLoader(root_dir) # TBC
 valid_dataset = SpecDsLoader(root_dir) # TBC
 N = len(train_dataset)
 inds = list(range(N))
-split = int(np.floor(PT*N))
-train_ids,valid_ids = inds[:split],inds[:split]
+s1 = int(np.floor(p_train*N))
+s2 = int(np.floor((p_train+p_val)*N))
+if shuffle:
+    np.random.shuffle(inds)
+train_ids,valid_ids = inds[:s1],inds[s1:s2]
 train_sampler = SubsetRandomSampler(train_ids)
 valid_sampler = SubsetRandomSampler(valid_ids)
 
@@ -115,8 +163,6 @@ timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
 epoch_number = 0
 
-EPOCHS = 5
-
 best_vloss = 1_000_000.
 
 for epoch in range(EPOCHS):
@@ -147,3 +193,4 @@ for epoch in range(EPOCHS):
         torch.save(model.state_dict(), model_path)
 
     epoch_number += 1
+# %%
