@@ -9,6 +9,8 @@ written 10-10-2025
 import numpy as np
 import os
 
+np.random.seed(123)
+
 class GetRaman:
     """
     Get raman spectra from the folders of the Li et. al. 2025 dataset files.
@@ -25,7 +27,7 @@ class GetRaman:
     
     """
     
-    def __init__(self, folder_path, n_peaks=10):
+    def __init__(self, folder_path, n_peaks=10, seed=123):
         """
         Parameters
         ----------
@@ -81,6 +83,22 @@ class GetRaman:
                 raman_spectrum = np.vstack((raman_spectrum, line))
         return raman_spectrum
     
+    def normalise(raman_peaks):
+        """
+        normalises the intensities to 1
+
+        Parameters
+        ----------
+        raman_peaks : 2d numpy array
+            (frequencies, intensities)
+
+        Returns
+        -------
+        2d numpy array
+
+        """
+        return raman_peaks/max(raman_peaks)
+    
     def equalise_length(self, raman_spectrum):
         #if there are more peaks than needed, take the strongest
         if len(raman_spectrum[:,0]) > self.n_peaks:
@@ -91,10 +109,12 @@ class GetRaman:
             
         #if there are fewer peaks than needed than fill with zeros
         elif len(raman_spectrum) < self.n_peaks:
-            zeros = np.zeros((self.n_peaks-len(raman_spectrum), 2)) #array of zeros
-            raman_spectrum = np.vstack((raman_spectrum, zeros)) #concatenate arrays
+            rand_freqs = np.random.uniform(low=0, high=4410, size=(self.n_peaks-len(raman_spectrum)))
+            zero_intensities = np.zeros(self.n_peaks-len(raman_spectrum))
+            raman_spectrum = np.vstack((raman_spectrum, np.hstack((rand_freqs, zero_intensities)))) #concatenate arrays
         
         return raman_spectrum
+    
     
     def get_many_spec(self, crystal_id_list):
         """
@@ -119,6 +139,7 @@ class GetRaman:
         raman_spectra = np.empty((self.n_peaks,2,0))
         for cryst_id in crystal_id_list:
             raman_spectrum = self.get_single_spec(cryst_id)
+            raman_spectrum[:,1] = raman_spectrum[:,1]/max(raman_spectrum[:,1]) # normalise
             raman_spectrum = self.equalise_length(raman_spectrum)
             raman_spectra = np.dstack((raman_spectra, raman_spectrum))
         return raman_spectra
