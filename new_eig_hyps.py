@@ -44,16 +44,16 @@ class Normalizer(object):
 
 class logNormalizer(object):
     def __init__(self,scale_fac):
-        self.scale_fac = 1
+        self.scale_fac = scale_fac
 
     def norm(self,tensor):
         temp = tensor
-        temp[:,:4] *= self.scale_fac
+        temp[:,:4] = torch.log(torch.abs(temp[:,:4]))/np.log(self.scale_fac)
         return temp
     
     def denorm(self,tensor):
         temp = tensor
-        temp[:,:4] *= self.inv_fac
+        temp[:,:4] = torch.exp(temp[:,:4]*np.log(self.scale_fac))
         return temp
 
 def trainModel(
@@ -74,7 +74,16 @@ def trainModel(
     scale=4410,
     k1=1,
     k2=0.8,
-    bsize=256
+    bsize=256,
+    lognorm = False,
+    res=False,
+    n_r=3,
+    n_r_fea=64,
+    n_r_h_fea=32,
+    testing=False,
+    fname='id_prop.npy',
+    lossmode=None,
+    peaks=False
 ):
     torch.manual_seed(seed)
     mom = 0.9
@@ -82,22 +91,52 @@ def trainModel(
     do_cuda = False
     batch_size = bsize
     num_workers = 0
-    loss_fn =  wloss2(k1,k2)
-    #loss_fn = nn.L1Loss()
-    scale_fac = scale
+    if lossmode==None and not peaks:
+        loss_fn =  wloss2(k1,k2)
+    elif lossmode=='L1Loss':
+        loss_fn = nn.L1Loss()
+    elif lossmode == 'MSELoss':
+        loss_fn = nn.MSELoss()
+    else:
+        print('Invalid Loss Mode.')
+        return (1,1,1)
+    
+    if not peaks:
+        scale_fac = scale
+    else:
+        scale_fac = 1
 
 
-    dataset = JSONData(root_dir)
+    dataset = JSONData(root_dir,fname=fname)
 
     structures, _, _ = dataset[0]
     orig_atom_fea_len = structures[0].shape[-1]
     nbr_fea_len = structures[1].shape[-1]
 
-    model = eg.CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len,
+    if peaks:
+        outlen = 1
+    else:
+        outlen = 8
+
+    if testing:
+        model = eg.cat_CGCNN(orig_atom_fea_len, nbr_fea_len,
                                     atom_fea_len=atom_fea_len,
                                     n_conv=n_conv,
                                     n_h=n_h,
-                                    h_fea_len=h_fea_len,output_len=8)
+                                    h_fea_len=h_fea_len,output_len=outlen)
+    elif res:
+        model = eg.resnet_cgcnn(orig_atom_fea_len, nbr_fea_len,
+                                    atom_fea_len=atom_fea_len,
+                                    n_conv=n_conv,
+                                    n_h=n_h,
+                                    h_fea_len=h_fea_len,cgcnn_len=n_r_fea,
+                                    n_r=n_r,r_hidden_fea=n_r_h_fea,output_len=outlen)
+    else:
+        model = eg.CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len,
+                                    atom_fea_len=atom_fea_len,
+                                    n_conv=n_conv,
+                                    n_h=n_h,
+                                    h_fea_len=h_fea_len,output_len=outlen)
     
 
 
@@ -107,9 +146,9 @@ def trainModel(
         optimizer = torch.optim.Adam(model.parameters(),lr=lr,weight_decay=wd)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=mom, weight_decay=wd)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min",patience=5,threshold=0.01)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min",patience=10,threshold=0.0003)
     if infin:
-        EPOCHS = 100 # not quite "infinite", but you get the idea
+        EPOCHS = 200 # not quite "infinite", but you get the idea
 
     # make loaders
     collate_fn = collate_pool
@@ -128,7 +167,10 @@ def trainModel(
         test_size=None,
         return_test=True)
     # end
-    normalizer = Normalizer(scale_fac=scale_fac)
+    if lognorm:
+        normalizer = logNormalizer(scale_fac=scale_fac)
+    else:
+        normalizer = Normalizer(scale_fac=scale_fac)
     # epoch training
     def train_one_epoch(epoch_index, tb_writer):
         running_loss = 0.
@@ -162,8 +204,10 @@ def trainModel(
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     writer = SummaryWriter('runs/fashion_trainer_{}'.format(timestamp))
     epoch_number = 0
-
-    maes = np.empty((EPOCHS,4))
+    if not peaks:
+        maes = np.empty((EPOCHS,4))
+    else:
+        maes = np.ones((EPOCHS,))
     losses = np.array([],dtype=np.float32)
     thres = 1e-6
     # iter over epochs
@@ -193,21 +237,24 @@ def trainModel(
                 denormed_outs = normalizer.denorm(vouts)
                 denormed_ins = normalizer.denorm(vtargs_var)
                 # MAE loss?
-                vmae1 = mae(denormed_outs,denormed_ins,0)
-                running_vmae1 += vmae1
-                vmae2 = mae(denormed_outs,denormed_ins,1)
-                running_vmae2 += vmae2
-                vmae3 = mae(denormed_outs,denormed_ins,2)
-                running_vmae3 += vmae3
-                vmae4 = mae(denormed_outs,denormed_ins,3)
-                running_vmae4 += vmae4
+                if not peaks:
+                    vmae1 = mae(denormed_outs,denormed_ins,0)
+                    running_vmae1 += vmae1
+                    vmae2 = mae(denormed_outs,denormed_ins,1)
+                    running_vmae2 += vmae2
+                    vmae3 = mae(denormed_outs,denormed_ins,2)
+                    running_vmae3 += vmae3
+                    vmae4 = mae(denormed_outs,denormed_ins,3)
+                    running_vmae4 += vmae4
         avg_vloss = running_vloss / (i+1)
-        avg_vmae1 = running_vmae1 / (i+1)
-        avg_vmae2 = running_vmae2 / (i+1)
-        avg_vmae3 = running_vmae3 / (i+1)
-        avg_vmae4 = running_vmae4 / (i+1)
+        if not peaks:
+            avg_vmae1 = running_vmae1 / (i+1)
+            avg_vmae2 = running_vmae2 / (i+1)
+            avg_vmae3 = running_vmae3 / (i+1)
+            avg_vmae4 = running_vmae4 / (i+1)
         print("Epoch"+str(epoch)+", validation loss:",avg_vloss)
-        maes[epoch,:] = np.array([avg_vmae1,avg_vmae2,avg_vmae3,avg_vmae4])
+        if not peaks:
+            maes[epoch,:] = np.array([avg_vmae1,avg_vmae2,avg_vmae3,avg_vmae4])
         losses = np.append(losses,np.array([avg_vloss]))
         # step the optimizer
         if not adam:
@@ -226,7 +273,7 @@ def trainModel(
     # return the stuff.
     return maes[0:(epoch+1)],losses,model
 
-def testmodel(inmodel,N=20,mode='valid',scale=4410):
+def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False):
     root_dir = "C:/Users/bjama/Desktop/big_NN/big_NN/data"
     dataset = JSONData(root_dir)
 
@@ -252,7 +299,10 @@ def testmodel(inmodel,N=20,mode='valid',scale=4410):
     else:
         print("Invalid mode.")
         return
-    normalizer = Normalizer(scale_fac=scale)
+    if lognorm:
+        normalizer = logNormalizer(scale_fac=scale)
+    else:
+        normalizer = Normalizer(scale_fac=scale)
     inmodel.eval()
     with torch.no_grad():
         for i,(tins,targs,_) in enumerate(loader):
@@ -261,6 +311,7 @@ def testmodel(inmodel,N=20,mode='valid',scale=4410):
                         tins[1].requires_grad_(True),
                         tins[2],
                         tins[3])
+            print(tins[3])
             normed_outs = inmodel(*tin_var)
             print("Normed output:")
             print(normed_outs)
