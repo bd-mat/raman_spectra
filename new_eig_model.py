@@ -240,7 +240,7 @@ class cat_CGCNN(nn.Module):
         self.convs = nn.ModuleList([ConvLayer(atom_fea_len=atom_fea_len,
                                     nbr_fea_len=nbr_fea_len)
                                     for _ in range(n_conv)])
-        self.conv_to_fc = nn.Linear(4*atom_fea_len, h_fea_len)
+        self.conv_to_fc = nn.Linear(n_conv*atom_fea_len, h_fea_len)
         self.conv_to_fc_softplus = nn.Softplus()
         if n_h > 1:
             self.fcs = nn.ModuleList([nn.Linear(h_fea_len, h_fea_len)
@@ -284,7 +284,9 @@ class cat_CGCNN(nn.Module):
         cfs = []
         for cout in conv_outs:
             cfs.append(self.pooling(cout,crystal_atom_idx))
-        crys_fea = torch.cat(cfs,dim=1)
+        # cfs: list of length n_conv with elements of shape (N0, atom_fea_len)
+        crys_fea = torch.cat(cfs,dim=1) # concatenate along 2nd element dim
+        # output should be size (N0,n_conv*atom_fea_len)
         crys_fea = self.conv_to_fc(self.conv_to_fc_softplus(crys_fea))
         crys_fea = self.conv_to_fc_softplus(crys_fea)
         if hasattr(self, 'fcs') and hasattr(self, 'softpluses'):
