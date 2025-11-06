@@ -27,6 +27,11 @@ def wloss2(k1,k2):
         return torch.mean(diff)
     return loss
 
+def freqloss():
+    def loss(output,target):
+        diff = torch.abs(target-output)
+        return torch.mean(diff[0:4])
+
 class Normalizer(object):
     def __init__(self,scale_fac):
         self.scale_fac = 1/scale_fac
@@ -83,7 +88,8 @@ def trainModel(
     testing=False,
     fname='id_prop.npy',
     lossmode=None,
-    peaks=False
+    peaks=False,
+    patience=10
 ):
     torch.manual_seed(seed)
     mom = 0.9
@@ -146,7 +152,7 @@ def trainModel(
         optimizer = torch.optim.Adam(model.parameters(),lr=lr,weight_decay=wd)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=mom, weight_decay=wd)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min",patience=10,threshold=0.0003)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min",patience=patience,threshold=0.0003)
     if infin:
         EPOCHS = 200 # not quite "infinite", but you get the idea
 
@@ -273,10 +279,9 @@ def trainModel(
     # return the stuff.
     return maes[0:(epoch+1)],losses,model
 
-def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False):
+def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False,fname='id_prop.npy'):
     root_dir = "C:/Users/bjama/Desktop/big_NN/big_NN/data"
-    dataset = JSONData(root_dir)
-
+    dataset = JSONData(root_dir,fname=fname)
     collate_fn = collate_pool
     train_loader, valid_loader, _ = get_train_val_test_loader(
         dataset=dataset,
@@ -291,7 +296,7 @@ def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False):
         train_size=None,
         val_size=None,
         test_size=None,
-        return_test=True)
+        return_test=True,)
     if mode == 'valid':
         loader = valid_loader
     elif mode == 'train':
@@ -311,7 +316,6 @@ def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False):
                         tins[1].requires_grad_(True),
                         tins[2],
                         tins[3])
-            print(tins[3])
             normed_outs = inmodel(*tin_var)
             print("Normed output:")
             print(normed_outs)
@@ -323,9 +327,9 @@ def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False):
             if i >= N:
                 break
 
-def dummymodel(atom_fea_len=64,n_conv=3,n_h=25,h_fea_len=128):
+def dummymodel(atom_fea_len=64,n_conv=3,n_h=25,h_fea_len=128,fname='id_prop.npy'):
     root_dir = "C:/Users/bjama/Desktop/big_NN/big_NN/data"
-    dataset = JSONData(root_dir)
+    dataset = JSONData(root_dir,fname=fname)
     structures, _, _ = dataset[0]
     orig_atom_fea_len = structures[0].shape[-1]
     nbr_fea_len = structures[1].shape[-1]
