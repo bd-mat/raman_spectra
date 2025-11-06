@@ -308,24 +308,23 @@ def testmodel(inmodel,N=20,mode='valid',scale=4410,lognorm=False,fname='id_prop.
         normalizer = logNormalizer(scale_fac=scale)
     else:
         normalizer = Normalizer(scale_fac=scale)
+    
+    output = np.array((N,2,8))
+
     inmodel.eval()
     with torch.no_grad():
         for i,(tins,targs,_) in enumerate(loader):
-            print("Testing index "+str(i)+":")
+            if i == N:
+                break
             tin_var = (tins[0].requires_grad_(True),
                         tins[1].requires_grad_(True),
                         tins[2],
                         tins[3])
             normed_outs = inmodel(*tin_var)
-            print("Normed output:")
-            print(normed_outs)
             denorm_outs = normalizer.denorm(normed_outs)
-            print("Denormed Output:")
-            print(denorm_outs)
-            print("Target:")
-            print(targs)
-            if i >= N:
-                break
+            output[i,0,:] = denorm_outs.detach().numpy()
+            output[i,1,:] = targs.detach().numpy()
+    return output
 
 def dummymodel(atom_fea_len=64,n_conv=3,n_h=25,h_fea_len=128,fname='id_prop.npy'):
     root_dir = "C:/Users/bjama/Desktop/big_NN/big_NN/data"
