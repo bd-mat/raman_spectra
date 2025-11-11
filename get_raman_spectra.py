@@ -27,7 +27,7 @@ class GetRaman:
     
     """
     
-    def __init__(self, folder_path, n_peaks=10, seed=123):
+    def __init__(self, folder_path, n_peaks=10, seed=123, remove_neg_freq=True):
         """
         Parameters
         ----------
@@ -43,6 +43,7 @@ class GetRaman:
         """
         self.root = folder_path
         self.n_peaks = n_peaks
+        self.remove_neg_freq = remove_neg_freq
         
         #index the database folder
         assert os.path.exists(self.root), f'ERROR: {self.root} does not exist'
@@ -72,7 +73,7 @@ class GetRaman:
         raman_spectrum = np.empty((0,2)) #initialise output array
         name = self.dir_index[str(crystal_id)]  #get folder name for id
         fpath = self.root + f'/{name}' + '/raman.dat'
-        
+
         #some files are called harmonic.dat rather than raman.dat
         if os.path.exists(fpath) == False:
             fpath = self.root + f'/{name}' + '/harmonic.dat'
@@ -81,6 +82,9 @@ class GetRaman:
                 line = line.replace("\n", "")
                 line = np.array(line.split(' ')).astype(float)
                 raman_spectrum = np.vstack((raman_spectrum, line))
+        
+        if self.remove_neg_freq:
+            raman_spectrum = raman_spectrum[np.where(raman_spectrum[:,0]>0)[0],:]
         return raman_spectrum
     
     def normalise(raman_peaks):
@@ -111,9 +115,32 @@ class GetRaman:
         elif len(raman_spectrum) < self.n_peaks:
             rand_freqs = np.random.uniform(low=0, high=4410, size=(self.n_peaks-len(raman_spectrum)))
             zero_intensities = np.zeros(self.n_peaks-len(raman_spectrum))
-            raman_spectrum = np.vstack((raman_spectrum, np.hstack((rand_freqs, zero_intensities)))) #concatenate arrays
+            raman_spectrum = np.vstack((raman_spectrum, np.dstack((rand_freqs, zero_intensities))[0])) #concatenate arrays
+        
+        #sort spectrum by frequency
+        raman_spectrum = raman_spectrum[np.flip(np.argsort(raman_spectrum[:,0])),:]
         
         return raman_spectrum
+    
+    def clean(self, raman_peaks, threshold):
+        """
+        Removes all raman peaks below a threshold intensity.
+        This function should be used before equalising the length.
+
+        Parameters
+        ----------
+        raman_peaks : 2d numpy array
+            (frequency, intensity)
+        threshold : float
+            intensity below which all peaks will be removed
+
+        Returns
+        -------
+        2d numpy array
+            raman peaks, with peaks below threshold removed.
+
+        """
+        return raman_peaks[np.where(raman_peaks[:,1]>threshold)[0],:]
     
     
     def get_many_spec(self, crystal_id_list):
@@ -136,11 +163,26 @@ class GetRaman:
 
         """
         #initialise array
+        
+        
         raman_spectra = np.empty((self.n_peaks,2,0))
         for cryst_id in crystal_id_list:
             raman_spectrum = self.get_single_spec(cryst_id)
             raman_spectrum[:,1] = raman_spectrum[:,1]/max(raman_spectrum[:,1]) # normalise
+            raman_spectrum = self.clean(raman_spectrum, 0.1)
             raman_spectrum = self.equalise_length(raman_spectrum)
             raman_spectra = np.dstack((raman_spectra, raman_spectrum))
         return raman_spectra
     
+    
+    def get_num_freq(self, crystal_id_list, threshold=0.1):
+        freq_nums = np.zeros(len(crystal_id_list))
+        for i, crystal_id in enumerate(crystal_id_list):
+            raman_peaks = self.get_single_spec(crystal_id)
+            raman_peaks[:,1] /= max(raman_peaks[:,1]) #normalise
+            raman_peaks = self.clean(raman_peaks, threshold) #remove small peaks
+            freq_nums[i] = len(raman_peaks[:,0])
+        return freq_nums
+    
+
+            
